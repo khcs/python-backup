@@ -1,0 +1,237 @@
+#!/usr/bin/env python
+
+# This script copies the source locations indicated in the
+# 'backup-locations.txt' file zipped in .gz format to the
+# backup folder in CLINMAG and to additional locations
+# indicated in the 'backup-locations.txt' file.
+#
+# It maintains separate backup location of the machines
+# which is backed-up, so if you have multiple machines
+# which you backup, the backup-database will be maintained
+# separately in the folder named after the machine which is
+# backed up.
+#
+# It maintains logfile about what happend in backup.
+#
+
+"""
+12.July.10
+Hoo Chang Shin
+hoo.shin@icr.ac.uk
+"""
+
+
+import os
+from os import path
+from time import asctime
+import restformat
+import sys, socket
+
+
+# Name of the machine being backed up
+hostname = socket.gethostname()
+
+# Type of the OS being backed up
+os_type = sys.platform
+if os_type.find('darwin') >= 0:
+  # This is a Mac OS X
+  root_dir = '/'
+
+
+
+#Variables
+backupruntime_asc = asctime()
+backupruntime_wwh = backupruntime_asc.replace(' ', '-')
+backupruntime = backupruntime_wwh.replace(':', '.')
+
+
+# open file about the backup locations and sources
+sourcedirs = []
+path.exists('backup-locations.txt')
+f = open('backup-locations.txt', 'r+')
+source_flag = 0
+for line in f:
+  line = line.strip()
+
+  if source_flag == 1:
+    if path.exists(line):
+      sourcedirs.append(line)
+  else:
+    pass
+    
+  if '#source-location' in line:
+    source_flag = 1
+  else:
+    source_flag = 0
+    
+
+# Source Directories
+homedir = os.path.expanduser('~')
+#sourcedir = path.join(homedir, 'workspace')
+
+#Backup Directories
+backupruntime_gz = backupruntime + '.gz'
+backup_workspace = path.join(homedir, 'backup_workspace')
+backupdir = path.join(homedir, 'backup_workspace', hostname)
+backupdir_gz = path.join(backupdir, backupruntime_gz)
+
+
+# Archive the source directory
+if path.exists(backup_workspace):
+  print 'backup_workspace already exists\n continuing...'
+else:
+  os.mkdir(backup_workspace)
+
+if path.exists(backupdir):
+  print 'backup_workspace/"hostname"/ already exists\n continuing...'
+else:
+  os.mkdir(backupdir)
+
+
+# Logging START
+logfile = path.join(backupdir, 'clinmag-backup.py.log')
+if path.exists(logfile):
+  backuplog = open(logfile, 'a')
+else:
+  backuplog = open(logfile, 'w')
+  backuplog.write('Backup Log created on ' + backupruntime_asc + '\n')
+  backuplog.write('by the user: ' + os.getlogin() + '\n')
+  backuplog.write('by the program: ' + \
+                  'clinmag-backup.py - ver.0.1 - \Apr.19.2010\n')
+  backuplog.write('Machine name: ' + hostname + '\n\n')
+  backuplog.close()
+  backuplog = open(logfile, 'a')
+print >> backuplog, (restformat.title(backupruntime))
+print >> backuplog, (restformat.subtitle('BEGIN BACKUP'))
+
+
+# Make the instruction set, write on logfile, excute, and write on log file
+sourcedir = ''
+for dirs in sourcedirs:
+  sourcedir = sourcedir + ' ' + dirs
+    
+tar_instruction = 'tar --exclude=".*" -zcvf ' + backupdir_gz + ' ' \
+                  + sourcedir + ' >> ' + logfile
+print >> backuplog, (tar_instruction)
+backuplog.close()
+
+#print tar_instruction
+#exit()
+os.system(tar_instruction)
+
+
+# Run copy and rsync backup command to backup to the CLINMAG
+# It is Shared:\Clinmag on Windows
+backup_dir_in_CLINMAG = path.join(root_dir, 'Volumes', 'CLINMAG', os.getlogin(), \
+                                  'clinmag-backups') 
+machine_dir_folder_in_CLINMAG = path.join(backup_dir_in_CLINMAG, hostname)
+machine_dir_folder_in_CLINMAG_gz = path.join(machine_dir_folder_in_CLINMAG, \
+                                             backupruntime_gz)
+
+CLINMAG_exist_flag = 0
+if path.exists(backup_dir_in_CLINMAG):
+  print 'clinmag-backups already exists in CLINMAG\n continuing...'
+else:
+  try:
+    os.mkdir(path.join(backup_dir_in_CLINMAG))
+    print ('First time backup on CLINMAG server.\n Folder created\n' + \
+           'continuing...')
+    CLINMAG_exist_flag = 1
+  except OSError:
+    print 'I think CLINMAG is not mounted. Skipping backup to CLINMAG...'
+    
+if path.exists(machine_dir_folder_in_CLINMAG):
+  print 'clinmag-backups/"hostname" already exists in CLINMAG\n continuing...'
+else:
+  if CLINMAG_exist_flag == 1:
+    os.mkdir(machine_dir_folder_in_CLINMAG)
+    print ('First time backup of this machine on CLINMAG server.\n' + \
+           'Folder created\n continuing...')
+  else:
+    pass
+
+
+cp_clinmag_instruction = \
+    'cp ' + backupdir_gz + ' ' + machine_dir_folder_in_CLINMAG + ' >> ' \
+    + logfile
+    
+cp_clinmag_log_instruction = \
+    'cp ' + logfile + ' ' + machine_dir_folder_in_CLINMAG
+
+
+# Not using rsync for the moment
+# -- Considering of using repo instead
+rsync_clinmag_instruction = \
+    'rsync -avb --delete --exclude ".*" ' + backupdir_gz + ' ' + \
+    machine_dir_folder_in_CLINMAG + ' >> ' + logfile
+    #'rsync -avb --delete --backup-dir=' + '"' + \
+    #machine_dir_folder_in_CLINMAG_gz + '" ' + backupdir_gz + ' >> ' + logfile
+    
+rsync_clinmag_log_instruction = \
+    'rsync -avb --delete ' + backupdir_gz + ' ' + machine_dir_folder_in_CLINMAG\
+    + ' ' + logfile
+    #'rsync -avb --delete --backup-dir=' + '"' + machine_dir_folder_in_CLINMAG +\
+    #'" ' + logfile
+
+
+# Any external HDD locations to backup to?
+path.exists('backup-locations.txt')
+f = open('backup-locations.txt', 'r+')
+location_flag = 0
+for line in f:
+  line = path.join(line.strip())
+  line2 = path.join(line, hostname)
+
+  if location_flag == 1:
+    if path.exists(line):
+      print 'backup location already exists on ext-HDD'
+      print 'continues...'
+    else:
+      try:
+        os.mkdir(line)
+        os.mkdir(line2)
+        print 'first time backup with clinmag-backup on ext-HDD'
+      except OSError:
+        raise
+        pass
+      
+    cp_ext_HDD_instruction = \
+      'cp ' + backupdir_gz + ' ' + \
+      "'" + path.join(line2, backupruntime_gz) + "'" +\
+      ' >> ' + logfile
+    cp_ext_HDD_log_instruction = \
+      'cp ' + logfile + ' ' + \
+      "'" +path.join(line2, 'clinmag-backup.py.log') + "'"
+
+    print cp_ext_HDD_log_instruction
+    os.system(cp_ext_HDD_instruction)
+    
+  else:
+    pass
+    
+    
+  if '#backup-location' in line:
+    location_flag = 1
+  else:
+    location_flag = 0
+f.close()
+
+
+os.system(cp_clinmag_instruction)
+backuplog = open(logfile, 'a')
+print >> backuplog, (cp_clinmag_instruction)
+print >> backuplog, (cp_ext_HDD_instruction)
+
+
+# Logging END
+backuplog = open(logfile, 'a')
+print >> backuplog, (restformat.subtitle('END BACKUP'))
+print >> backuplog, ('\n\n')
+backuplog.close()
+
+os.system(cp_clinmag_log_instruction)
+os.system(cp_ext_HDD_log_instruction)
+
+# remove the zipped file in the machine
+os.system('rm ' + backupdir_gz)
+

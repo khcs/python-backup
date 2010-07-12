@@ -1,0 +1,11 @@
+#source-location-1
+/Users/hshin/ImportantDocuments
+
+#source-location-2
+/Users/hshin/ImportantImages
+
+
+
+#backup-location-1
+/Volumes/Iomega HDD/clinmag-backup
+

@@ -1,0 +1,11 @@
+hoo-backup
+Python backup tool to maintain the backups.
+It's like Apple Mac's Time Machine, but it is available for different
+machines and user can select which location to backup.
+
+Author: Hoo Chang Shin
+E-Mail 
+ ICR:     hoo.shin@icr.ac.uk
+
+
+ 
